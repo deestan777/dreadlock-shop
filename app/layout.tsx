@@ -12,9 +12,10 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 const inter = Inter({ subsets: ["latin", "cyrillic"] })
 
 export const metadata: Metadata = {
-  title: "Dreadlock Kits Shop",
-  description: "Customize your perfect dreadlock kit",
-    generator: 'v0.dev'
+  title: "Dreadlock Kits — догляд за дредами",
+  description: "Інструменти та засоби для створення й догляду за дредами.",
+  generator: "v0.dev",
+  themeColor: "#17130f"
 }
 
 export default function RootLayout({
