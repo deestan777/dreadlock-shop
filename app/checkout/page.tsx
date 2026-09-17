@@ -12,6 +12,8 @@ import { Toaster } from "@/components/ui/toaster"
 import { Loader2 } from "lucide-react"
 import { getAreas, getCities, searchPostOffices, type Area, type City, type PostOffice } from "@/lib/nova-poshta"
 import { PostOfficeSelector } from "@/components/post-office-selector"
+import { GooglePayButton } from "@/components/google-pay-button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function CheckoutPage() {
   const [isClient, setIsClient] = useState(false)
@@ -29,6 +31,7 @@ export default function CheckoutPage() {
   const [isLoadingCities, setIsLoadingCities] = useState(false)
   const [isLoadingOffices, setIsLoadingOffices] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "google-pay">("cod")
   const { items, totalPrice, clearCart } = useCart()
   const { toast } = useToast()
 
@@ -58,6 +61,7 @@ export default function CheckoutPage() {
       const areasList = await getAreas()
       setAreas(areasList)
     } catch (error) {
+      console.error("Error fetching areas:", error)
       toast({
         title: "Помилка",
         description: "Не вдалося завантажити список областей. Спробуйте оновити сторінку.",
@@ -74,6 +78,7 @@ export default function CheckoutPage() {
       const citiesList = await getCities(areaRef)
       setCities(citiesList)
     } catch (error) {
+      console.error("Error fetching cities:", error)
       toast({
         title: "Помилка",
         description: "Не вдалося завантажити список населених пунктів. Спробуйте ще раз.",
@@ -91,6 +96,7 @@ export default function CheckoutPage() {
       const offices = await searchPostOffices(cityRef)
       setPostOffices(offices)
     } catch (error) {
+      console.error("Error fetching post offices:", error)
       toast({
         title: "Помилка",
         description: "Не вдалося завантажити список відділень. Спробуйте ще раз.",
@@ -123,9 +129,11 @@ export default function CheckoutPage() {
       city: selectedCityName,
       postOffice: selectedPostOffice?.Description,
       comment,
+      paymentMethod,
     }
 
     try {
+      console.log("Sending order data:", orderData)
       const response = await fetch("/api/send-order", {
         method: "POST",
         headers: {
@@ -134,16 +142,19 @@ export default function CheckoutPage() {
         body: JSON.stringify(orderData),
       })
 
-      if (response.ok) {
-        toast({
-          title: "Замовлення відправлено",
-          description: "Ми зв'яжемося з вами найближчим часом для підтвердження.",
-        })
-        clearCart()
-      } else {
-        throw new Error("Failed to send order")
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("API error:", errorData)
+        throw new Error(`API error: ${JSON.stringify(errorData)}`)
       }
+
+      toast({
+        title: "Замовлення відправлено",
+        description: "Ми зв'яжемося з вами найближчим часом для підтвердження.",
+      })
+      clearCart()
     } catch (error) {
+      console.error("Error submitting order:", error)
       toast({
         title: "Помилка",
         description: "Не вдалося відправити замовлення. Спробуйте ще раз.",
@@ -153,6 +164,70 @@ export default function CheckoutPage() {
       setIsSubmitting(false)
     }
   }
+
+  const handleGooglePaySuccess = async (paymentData: any) => {
+    setIsSubmitting(true)
+
+    const selectedAreaName = areas.find((area) => area.Ref === selectedArea)?.Description
+    const selectedCityName = cities.find((city) => city.Ref === selectedCity)?.Description
+
+    const orderData = {
+      items: items.map((item) => `${item.name} (${item.quantity})`).join(", "),
+      totalPrice,
+      customerName: name,
+      customerPhone: phone,
+      customerEmail: email,
+      area: selectedAreaName,
+      city: selectedCityName,
+      postOffice: selectedPostOffice?.Description,
+      comment,
+      paymentMethod: "google-pay",
+    }
+
+    try {
+      console.log("Processing Google Pay payment:", { paymentData, orderData })
+      const response = await fetch("/api/process-google-pay", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ paymentData, orderData }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("API error:", errorData)
+        throw new Error(`API error: ${JSON.stringify(errorData)}`)
+      }
+
+      const data = await response.json()
+      toast({
+        title: "Оплату успішно здійснено",
+        description: `Ваше замовлення №${data.orderId} прийнято до обробки.`,
+      })
+      clearCart()
+    } catch (error) {
+      console.error("Error processing Google Pay payment:", error)
+      toast({
+        title: "Помилка оплати",
+        description: "Не вдалося обробити платіж. Спробуйте ще раз або виберіть інший спосіб оплати.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleGooglePayError = (error: Error) => {
+    console.error("Google Pay error:", error)
+    toast({
+      title: "Помилка Google Pay",
+      description: "Виникла проблема з обробкою платежу. Спробуйте інший спосіб оплати.",
+      variant: "destructive",
+    })
+  }
+
+  const isFormValid = name && phone && email && selectedArea && selectedCity && selectedPostOffice
 
   return (
     <div className="max-w-md mx-auto space-y-8">
@@ -258,24 +333,49 @@ export default function CheckoutPage() {
           </ul>
           <p className="font-bold mt-2">Загальна сума: {totalPrice} грн</p>
         </div>
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={isSubmitting || isLoadingAreas || isLoadingCities || isLoadingOffices || !selectedPostOffice}
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Відправка...
-            </>
-          ) : (
-            "Оформити замовлення"
-          )}
-        </Button>
+
+        <div className="mt-6">
+          <Label className="text-lg font-semibold">Спосіб оплати</Label>
+          <Tabs defaultValue="cod" onValueChange={(value) => setPaymentMethod(value as "cod" | "google-pay")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="cod">Накладений платіж</TabsTrigger>
+              <TabsTrigger value="google-pay">Google Pay</TabsTrigger>
+            </TabsList>
+            <TabsContent value="cod" className="mt-4">
+              <div className="p-4 bg-gray-50 rounded-md">
+                <p>Оплата при отриманні у відділенні Нової Пошти.</p>
+                <Button type="submit" className="w-full mt-4" disabled={isSubmitting || !isFormValid}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Відправка...
+                    </>
+                  ) : (
+                    "Оформити замовлення"
+                  )}
+                </Button>
+              </div>
+            </TabsContent>
+            <TabsContent value="google-pay" className="mt-4">
+              <div className="p-4 bg-gray-50 rounded-md">
+                <p>Оплатіть зараз за допомогою Google Pay.</p>
+                {isFormValid ? (
+                  <GooglePayButton
+                    amount={totalPrice}
+                    onPaymentSuccess={handleGooglePaySuccess}
+                    onPaymentError={handleGooglePayError}
+                  />
+                ) : (
+                  <Button disabled className="w-full mt-4">
+                    Заповніть всі поля форми
+                  </Button>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
       </form>
-      <div id="google-pay-button"></div>
       <Toaster />
     </div>
   )
 }
-
