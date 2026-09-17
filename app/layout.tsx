@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ["latin", "cyrillic"] })
 export const metadata: Metadata = {
   title: "Dreadlock Kits Shop",
   description: "Customize your perfect dreadlock kit",
-    generator: 'v0.dev'
+  generator: "v0.dev",
 }
 
 export default function RootLayout({
@@ -88,7 +88,3 @@ export default function RootLayout({
     </html>
   )
 }
-
-
-
-import './globals.css'
