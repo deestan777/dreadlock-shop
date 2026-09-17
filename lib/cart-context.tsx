@@ -8,6 +8,7 @@ type CartItem = {
   name: string
   price: number
   quantity: number
+  color?: string
 }
 
 type CartContextType = {
@@ -38,11 +39,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addItem = (item: CartItem) => {
     setItems((prevItems) => {
-      const existingItem = prevItems.find((i) => i.id === item.id)
-      if (existingItem) {
-        return prevItems.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i))
+      const existingItemIndex = prevItems.findIndex(
+        (i) => i.id === item.id && (item.color ? i.color === item.color : true),
+      )
+
+      if (existingItemIndex >= 0) {
+        return prevItems.map((i, index) =>
+          index === existingItemIndex ? { ...i, quantity: i.quantity + (item.quantity || 1) } : i,
+        )
       }
-      return [...prevItems, { ...item, quantity: 1 }]
+      return [...prevItems, { ...item, quantity: item.quantity || 1 }]
     })
   }
 
@@ -89,4 +95,3 @@ export const useCart = () => {
   }
   return context
 }
-

@@ -58,4 +58,3 @@ export function PostOfficeSelector({ postOffices, onSelect, isLoading }: PostOff
     </div>
   )
 }
-
